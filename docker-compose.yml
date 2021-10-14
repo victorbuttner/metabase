@@ -1,0 +1,57 @@
+  
+version: '2.2'
+services:
+  nginx: 
+    image: nginx:latest
+    container_name: production_nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - /etc/letsencrypt/:/etc/letsencrypt/
+    links:
+      - metabase
+    ports:
+      - 80:80
+      - 443:443
+    environment:
+        - ENV=production
+        - APPLICATION_URL=http://metabase  
+    restart: always      
+    depends_on:
+        metabase: { condition: service_healthy } 
+  postgres-db:
+    image: postgres
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      # declare your mount volume /host/dir:/container/dir
+      - ./pgdata:/var/lib/postgresql/data
+  metabase:
+    image: metabase/metabase:v0.37.7
+    restart: always
+    expose:
+      - "3000"
+    volumes:
+      # declare your mount volume /host/dir:/container/dir
+      - ./metabase-data:/metabase-data
+    env_file:
+      - .env
+    healthcheck:
+        test: ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
+        interval: 10s
+        timeout: 15s
+        retries: 10
+    depends_on:
+      - postgres-db
+    links:
+      - postgres-db
+  autoheal:
+    restart: always
+    image: willfarrell/autoheal
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=all
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
